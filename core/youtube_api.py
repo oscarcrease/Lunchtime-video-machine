@@ -115,6 +115,17 @@ def get_authenticated_service():
 
     code = st.query_params.get("code")
     if code:
+        # Clear the code from the URL FIRST, before exchanging it. If a
+        # second script rerun sneaks in before this one finishes (which
+        # Streamlit can trigger), it must not find the same code still
+        # sitting in the URL and try to redeem it again -- authorization
+        # codes are single-use, and a second attempt fails with
+        # InvalidGrantError. Clearing early means any such rerun instead
+        # falls through to session_state (already cached below) or the
+        # login link, never a duplicate exchange attempt.
+        for key in list(st.query_params.keys()):
+            del st.query_params[key]
+
         flow = _build_flow()
         flow.fetch_token(code=code)
         creds = flow.credentials
@@ -123,8 +134,6 @@ def get_authenticated_service():
         # Surface the refresh token once so the sidebar can prompt the
         # user to save it to secrets for persistent login.
         st.session_state.new_refresh_token = creds.refresh_token
-        for key in list(st.query_params.keys()):
-            del st.query_params[key]
         return service
 
     return None
