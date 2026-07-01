@@ -115,14 +115,19 @@ def get_authenticated_service():
 
     code = st.query_params.get("code")
     if code:
-        # Clear the code from the URL FIRST, before exchanging it. If a
-        # second script rerun sneaks in before this one finishes (which
-        # Streamlit can trigger), it must not find the same code still
-        # sitting in the URL and try to redeem it again -- authorization
-        # codes are single-use, and a second attempt fails with
-        # InvalidGrantError. Clearing early means any such rerun instead
-        # falls through to session_state (already cached below) or the
-        # login link, never a duplicate exchange attempt.
+        # Streamlit can run the script twice in quick succession right
+        # after a fresh page load/redirect. If a second run starts before
+        # the first one finishes, both could see the same code and both
+        # try to redeem it -- authorization codes are single-use, and a
+        # second attempt fails with InvalidGrantError. Track the exact
+        # code value in session_state (a fast local write, unlike
+        # clearing the URL which has to round-trip to the browser) so a
+        # near-simultaneous second run recognizes it's already being
+        # handled and backs off instead of re-exchanging it.
+        if st.session_state.get("_last_oauth_code") == code:
+            return st.session_state.get("youtube_service")
+        st.session_state["_last_oauth_code"] = code
+
         for key in list(st.query_params.keys()):
             del st.query_params[key]
 
