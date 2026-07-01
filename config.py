@@ -33,6 +33,13 @@ VIDEOS_PER_CHANNEL_FETCH = 10
 # the API (keeps us well under the daily quota).
 CACHE_TTL_HOURS = 12
 
+# --- Shorts filtering ---
+# Videos at or under this duration are treated as YouTube Shorts and
+# excluded entirely from every screen. YouTube's own product now allows
+# Shorts up to 3 minutes, so we use that as the safe cutoff rather than
+# the older 60-second rule of thumb.
+SHORTS_MAX_SECONDS = 180
+
 # --- Time budget buckets (minutes) ---
 # Each bucket is (label, min_minutes, max_minutes). max_minutes=None means
 # "and up". Used by the time-picker screen and the filtering logic.
