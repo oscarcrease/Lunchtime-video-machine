@@ -55,13 +55,14 @@ TIME_BUCKETS = [
 # later in the Settings screen.
 DEFAULT_RULES = {
     # Max times per day the "pick a video" flow can be run, per day-of-week
-    # bucket. 0-6 = Mon-Sun (Python's weekday() convention).
+    # bucket. None = unlimited.
     "weekday_daily_limit": 1,   # Mon-Fri
-    "weekend_daily_limit": None,  # None = unlimited
-    # Optional time-of-day window during which the weekday limit applies.
-    # Outside this window on weekdays, rules_engine can be configured to
-    # block entirely or ignore the limit -- decided in rules_engine.py.
-    "restricted_window_start": "17:00",
-    "restricted_window_end": "21:00",
-    "restricted_window_enabled": False,
+    "weekend_daily_limit": None,  # Sat-Sun, None = unlimited
+    # Optional time-of-day window during which the app is USABLE at all
+    # (e.g. lunch break, 12:00-13:00). Outside this window, the app is
+    # blocked entirely regardless of daily count remaining. When disabled,
+    # there's no time restriction -- only the daily count limit applies.
+    "allowed_window_start": "12:00",
+    "allowed_window_end": "13:00",
+    "allowed_window_enabled": False,
 }
