@@ -88,23 +88,33 @@ def render_sidebar():
                 )
 
             if st.button("🔄 Refresh from YouTube", use_container_width=True):
-                with st.spinner("Fetching your subscriptions... this can take a minute."):
-                    try:
-                        count = youtube_api.refresh_subscription_cache(yt)
-                        st.success(f"Refreshed {count} channels!")
-                        st.rerun()
-                    except HttpError as e:
-                        status = e.resp.status if hasattr(e, "resp") else None
-                        if status == 403 and "quota" in str(e).lower():
-                            st.error(
-                                "YouTube's daily API quota has been used up. This resets "
-                                "at midnight Pacific time -- try again tomorrow, or use "
-                                "whatever's already cached in the meantime."
-                            )
-                        else:
-                            st.error(f"YouTube API error ({status}): {e}")
-                    except Exception as e:
-                        st.error(f"Something went wrong refreshing subscriptions: {e}")
+                progress_bar = st.progress(0.0)
+                status_text = st.empty()
+
+                def _on_progress(index, total, channel_title):
+                    progress_bar.progress(index / total)
+                    status_text.caption(f"Checking {index}/{total}: {channel_title}")
+
+                try:
+                    count = youtube_api.refresh_subscription_cache(
+                        yt, progress_callback=_on_progress
+                    )
+                    progress_bar.empty()
+                    status_text.empty()
+                    st.success(f"Refreshed {count} channels!")
+                    st.rerun()
+                except HttpError as e:
+                    status = e.resp.status if hasattr(e, "resp") else None
+                    if status == 403 and "quota" in str(e).lower():
+                        st.error(
+                            "YouTube's daily API quota has been used up. This resets "
+                            "at midnight Pacific time -- try again tomorrow, or use "
+                            "whatever's already cached in the meantime."
+                        )
+                    else:
+                        st.error(f"YouTube API error ({status}): {e}")
+                except Exception as e:
+                    st.error(f"Something went wrong refreshing subscriptions: {e}")
 
 
 def _render_settings_lock_gate():
