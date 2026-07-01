@@ -49,6 +49,10 @@ def render_sidebar():
         channels = db.get_all_channels()
         st.caption(f"{len(channels)} channels cached")
 
+        cached_videos = db.get_cached_videos()
+        with_duration = sum(1 for v in cached_videos if v["duration_seconds"] > 0)
+        st.caption(f"{len(cached_videos)} videos cached ({with_duration} with duration data)")
+
         try:
             yt = youtube_api.get_authenticated_service()
         except KeyError as e:
