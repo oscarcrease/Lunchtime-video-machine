@@ -97,7 +97,7 @@ def render_sidebar():
 
                 try:
                     count = youtube_api.refresh_subscription_cache(
-                        yt, progress_callback=_on_progress
+                        yt, force=True, progress_callback=_on_progress
                     )
                     progress_bar.empty()
                     status_text.empty()
