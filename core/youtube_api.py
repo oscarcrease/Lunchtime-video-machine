@@ -204,6 +204,7 @@ def fetch_subscriptions(youtube) -> list[dict]:
 def _get_uploads_playlist_id(youtube, channel_id: str) -> str | None:
     response = youtube.channels().list(part="contentDetails", id=channel_id).execute()
     items = response.get("items", [])
+    print(f"[DEBUG] channels().list for {channel_id}: {len(items)} items returned")
     if not items:
         return None
     return items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
@@ -217,6 +218,7 @@ def fetch_recent_videos(youtube, channel_id: str, max_results: int = VIDEOS_PER_
     playlistItems doesn't return it and it requires a separate call.
     """
     uploads_playlist_id = _get_uploads_playlist_id(youtube, channel_id)
+    print(f"[DEBUG] {channel_id}: uploads_playlist_id = {uploads_playlist_id!r}")
     if not uploads_playlist_id:
         return []
 
@@ -225,9 +227,11 @@ def fetch_recent_videos(youtube, channel_id: str, max_results: int = VIDEOS_PER_
         playlistId=uploads_playlist_id,
         maxResults=max_results,
     ).execute()
+    raw_items = response.get("items", [])
+    print(f"[DEBUG] {channel_id}: playlistItems returned {len(raw_items)} raw items")
 
     videos = []
-    for item in response.get("items", []):
+    for item in raw_items:
         snippet = item["snippet"]
         # Skip private/deleted videos, which show up with this placeholder title
         if snippet["title"] in ("Private video", "Deleted video"):
@@ -239,6 +243,7 @@ def fetch_recent_videos(youtube, channel_id: str, max_results: int = VIDEOS_PER_
             "thumbnail_url": snippet.get("thumbnails", {}).get("medium", {}).get("url"),
             "published_at": snippet["publishedAt"],
         })
+    print(f"[DEBUG] {channel_id}: {len(videos)} videos after filtering private/deleted")
     return videos
 
 
