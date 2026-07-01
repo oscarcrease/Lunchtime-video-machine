@@ -2,27 +2,31 @@
 youtube_api.py — Google OAuth login + YouTube Data API access.
 
 Handles:
-  - authenticating the user (opens a browser tab on first run, then
-    reuses a cached token)
+  - authenticating the user via a web-redirect OAuth flow (works on a
+    headless deployed server, unlike a local-browser flow)
   - fetching the user's subscriptions
   - fetching recent uploads + durations per channel
   - writing everything into the local cache (core/database.py) so we
     don't re-hit the API more often than CACHE_TTL_HOURS
 
-No Streamlit imports here either — this stays testable as plain Python.
+Note: this file DOES import Streamlit, unlike the other core/ modules.
+OAuth's redirect-based flow is inherently tied to the request cycle
+(reading the ?code= query param Google redirects back with, and caching
+the resulting client in the user's session), which are Streamlit-specific
+concepts. Everything else in core/ stays framework-agnostic; this is the
+one deliberate exception.
 """
 
 import re
 from datetime import datetime, timedelta
 
+import streamlit as st
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from config import (
-    CLIENT_SECRET_PATH,
-    TOKEN_PATH,
     YOUTUBE_SCOPES,
     YOUTUBE_API_SERVICE_NAME,
     YOUTUBE_API_VERSION,
@@ -34,36 +38,96 @@ from core import database as db
 
 # --- Auth ---
 
+def _oauth_secrets() -> dict:
+    if "google_oauth" not in st.secrets:
+        raise KeyError(
+            "Missing [google_oauth] section in secrets. Add client_id, "
+            "client_secret, and redirect_uri -- see .streamlit/secrets.toml.example."
+        )
+    return st.secrets["google_oauth"]
+
+
+def _build_flow() -> Flow:
+    secrets = _oauth_secrets()
+    client_config = {
+        "web": {
+            "client_id": secrets["client_id"],
+            "client_secret": secrets["client_secret"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+        }
+    }
+    return Flow.from_client_config(
+        client_config, scopes=YOUTUBE_SCOPES, redirect_uri=secrets["redirect_uri"]
+    )
+
+
+def get_login_url() -> str:
+    """Builds the Google consent-screen URL for the 'Log in' link."""
+    flow = _build_flow()
+    auth_url, _state = flow.authorization_url(
+        access_type="offline",
+        include_granted_scopes="true",
+        prompt="consent",  # forces a fresh refresh_token every time, not just the first
+    )
+    return auth_url
+
+
+def _credentials_from_refresh_token(refresh_token: str) -> Credentials:
+    secrets = _oauth_secrets()
+    creds = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        client_id=secrets["client_id"],
+        client_secret=secrets["client_secret"],
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=YOUTUBE_SCOPES,
+    )
+    creds.refresh(Request())
+    return creds
+
+
 def get_authenticated_service():
     """
-    Returns an authenticated YouTube API client.
+    Returns an authenticated YouTube API client, or None if the user
+    still needs to log in (caller should show a login link from
+    get_login_url()).
 
-    First run: opens a browser tab for the user to log in and consent,
-    then caches the resulting token to TOKEN_PATH.
-    Subsequent runs: reuses/refreshes the cached token silently.
+    Checked in order:
+      1. Already authenticated earlier this session -> reuse it.
+      2. A saved refresh_token in secrets -> silent login, no redirect
+         needed. This is what makes a deployed app usable without
+         re-consenting on every visit; see the setup notes for how to
+         save one after first login.
+      3. A fresh authorization 'code' Google just redirected back with
+         -> completes first-time login.
+      4. None of the above -> caller must show the login link.
     """
-    creds = None
+    if "youtube_service" in st.session_state:
+        return st.session_state.youtube_service
 
-    if TOKEN_PATH.exists():
-        creds = Credentials.from_authorized_user_file(str(TOKEN_PATH), YOUTUBE_SCOPES)
+    saved_refresh_token = st.secrets.get("google_oauth", {}).get("refresh_token")
+    if saved_refresh_token:
+        creds = _credentials_from_refresh_token(saved_refresh_token)
+        service = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, credentials=creds)
+        st.session_state.youtube_service = service
+        return service
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            if not CLIENT_SECRET_PATH.exists():
-                raise FileNotFoundError(
-                    f"Missing {CLIENT_SECRET_PATH.name}. Download it from Google Cloud "
-                    "Console (OAuth client credentials) and place it in the project root."
-                )
-            flow = InstalledAppFlow.from_client_secrets_file(
-                str(CLIENT_SECRET_PATH), YOUTUBE_SCOPES
-            )
-            creds = flow.run_local_server(port=0)
+    code = st.query_params.get("code")
+    if code:
+        flow = _build_flow()
+        flow.fetch_token(code=code)
+        creds = flow.credentials
+        service = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, credentials=creds)
+        st.session_state.youtube_service = service
+        # Surface the refresh token once so the sidebar can prompt the
+        # user to save it to secrets for persistent login.
+        st.session_state.new_refresh_token = creds.refresh_token
+        for key in list(st.query_params.keys()):
+            del st.query_params[key]
+        return service
 
-        TOKEN_PATH.write_text(creds.to_json())
-
-    return build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, credentials=creds)
+    return None
 
 
 # --- Duration parsing ---
