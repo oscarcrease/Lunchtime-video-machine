@@ -1,0 +1,20 @@
+# Secrets
+.env
+client_secret*.json
+token.json
+
+# Database
+data/*.db
+data/*.db-journal
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
