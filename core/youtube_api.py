@@ -58,7 +58,18 @@ def _build_flow() -> Flow:
         }
     }
     return Flow.from_client_config(
-        client_config, scopes=YOUTUBE_SCOPES, redirect_uri=secrets["redirect_uri"]
+        client_config,
+        scopes=YOUTUBE_SCOPES,
+        redirect_uri=secrets["redirect_uri"],
+        # PKCE is optional for confidential clients like this one (we have
+        # a real client_secret, unlike a mobile/SPA app that PKCE is
+        # designed for). It's disabled here because the authorization-url
+        # step and the token-exchange step each build a fresh Flow object
+        # in separate Streamlit reruns -- there's no way to share an
+        # auto-generated code_verifier between them across the browser
+        # redirect round-trip, which caused "Missing code verifier" /
+        # InvalidGrantError on every login attempt.
+        autogenerate_code_verifier=False,
     )
 
 
