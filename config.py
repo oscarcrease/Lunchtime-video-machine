@@ -12,13 +12,11 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "app.db"
 
-# Google OAuth client secret file (you'll download this from Google Cloud
-# Console in the next step and put it here).
-CLIENT_SECRET_PATH = BASE_DIR / "client_secret.json"
-
-# Where the user's OAuth token gets cached after first login, so they don't
-# have to re-authenticate every single run.
-TOKEN_PATH = BASE_DIR / "token.json"
+# Google OAuth credentials now come from Streamlit secrets (st.secrets),
+# not a local client_secret.json file -- see .streamlit/secrets.toml.example.
+# This is required for cloud deployment: a local-browser OAuth flow can't
+# work on a headless server, and secrets are the standard way to store
+# credentials both locally and on Streamlit Community Cloud.
 
 # --- YouTube API ---
 # Read-only scope is all we need: reading subscriptions and video metadata.
