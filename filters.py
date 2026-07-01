@@ -63,6 +63,18 @@ def get_available_creators(videos: list[sqlite3.Row]) -> list[dict]:
     ]
 
 
+def get_bucket_label_for_minutes(minutes: float) -> str:
+    """
+    Maps an exact minute value to its matching bucket label from
+    config.TIME_BUCKETS, e.g. 15 -> "Short (10-20 min)". Falls back to
+    the last bucket (the open-ended "and up" one) if nothing else matches.
+    """
+    for label, min_minutes, max_minutes in TIME_BUCKETS:
+        if minutes >= min_minutes and (max_minutes is None or minutes <= max_minutes):
+            return label
+    return TIME_BUCKETS[-1][0]
+
+
 def get_filtered_videos(
     all_cached_videos: list[sqlite3.Row],
     watched_ids: set[str],
