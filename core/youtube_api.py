@@ -275,10 +275,17 @@ def refresh_subscription_cache(youtube, force: bool = False) -> int:
     refreshed_count = 0
 
     for sub in subscriptions:
-        db.upsert_channel(sub["channel_id"], sub["title"], sub["thumbnail_url"])
-
-        if not force and not _is_stale(db.get_channel_last_fetched(sub["channel_id"])):
+        # Check staleness against the EXISTING stored timestamp, before
+        # touching it. Calling upsert_channel() first (as this used to)
+        # would overwrite last_fetched_at with "now" before we ever
+        # checked it, making every channel look artificially fresh and
+        # skipping video fetching entirely -- on every single run,
+        # including the very first one.
+        existing_last_fetched = db.get_channel_last_fetched(sub["channel_id"])
+        if not force and not _is_stale(existing_last_fetched):
             continue
+
+        db.upsert_channel(sub["channel_id"], sub["title"], sub["thumbnail_url"])
 
         videos = fetch_recent_videos(youtube, sub["channel_id"])
         if not videos:
@@ -298,8 +305,6 @@ def refresh_subscription_cache(youtube, force: bool = False) -> int:
                 duration_seconds=duration_seconds,
             )
 
-        # Re-touch the channel's last_fetched_at now that videos are cached
-        db.upsert_channel(sub["channel_id"], sub["title"], sub["thumbnail_url"])
         refreshed_count += 1
 
     return refreshed_count
