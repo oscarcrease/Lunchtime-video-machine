@@ -49,33 +49,58 @@ def render_sidebar():
         channels = db.get_all_channels()
         st.caption(f"{len(channels)} channels cached")
 
-        if st.button("🔄 Refresh from YouTube", use_container_width=True):
-            with st.spinner("Fetching your subscriptions... this can take a minute."):
-                try:
-                    yt = youtube_api.get_authenticated_service()
-                    count = youtube_api.refresh_subscription_cache(yt)
-                    st.success(f"Refreshed {count} channels!")
-                    st.rerun()
-                except FileNotFoundError as e:
-                    st.error(str(e))
-                except RefreshError:
-                    st.error(
-                        "Your YouTube login has expired or been revoked. "
-                        "Delete `token.json` from the project folder and click Refresh "
-                        "again to log in fresh."
-                    )
-                except HttpError as e:
-                    status = e.resp.status if hasattr(e, "resp") else None
-                    if status == 403 and "quota" in str(e).lower():
-                        st.error(
-                            "YouTube's daily API quota has been used up. This resets "
-                            "at midnight Pacific time -- try again tomorrow, or use "
-                            "whatever's already cached in the meantime."
-                        )
-                    else:
-                        st.error(f"YouTube API error ({status}): {e}")
-                except Exception as e:
-                    st.error(f"Something went wrong refreshing subscriptions: {e}")
+        try:
+            yt = youtube_api.get_authenticated_service()
+        except KeyError as e:
+            st.error(str(e))
+            yt = None
+        except RefreshError:
+            st.error(
+                "Your saved YouTube login has expired or been revoked. "
+                "Remove `refresh_token` from your secrets and log in again below."
+            )
+            yt = None
+
+        if yt is None:
+            try:
+                login_url = youtube_api.get_login_url()
+                st.link_button("🔐 Log in with Google", login_url, use_container_width=True)
+            except KeyError as e:
+                st.error(
+                    f"Missing or incomplete [google_oauth] secrets: {e}. "
+                    "Check that client_id, client_secret, and redirect_uri are "
+                    "all present under [google_oauth] in your Secrets."
+                )
+        else:
+            new_token = st.session_state.get("new_refresh_token")
+            if new_token:
+                st.warning("Save this to stay logged in permanently:")
+                st.code(new_token, language=None)
+                st.caption(
+                    "Add it to your app's Secrets as "
+                    '`refresh_token = "paste-here"` under `[google_oauth]`, '
+                    "then reboot the app. Otherwise you'll need to log in again "
+                    "next time this session ends."
+                )
+
+            if st.button("🔄 Refresh from YouTube", use_container_width=True):
+                with st.spinner("Fetching your subscriptions... this can take a minute."):
+                    try:
+                        count = youtube_api.refresh_subscription_cache(yt)
+                        st.success(f"Refreshed {count} channels!")
+                        st.rerun()
+                    except HttpError as e:
+                        status = e.resp.status if hasattr(e, "resp") else None
+                        if status == 403 and "quota" in str(e).lower():
+                            st.error(
+                                "YouTube's daily API quota has been used up. This resets "
+                                "at midnight Pacific time -- try again tomorrow, or use "
+                                "whatever's already cached in the meantime."
+                            )
+                        else:
+                            st.error(f"YouTube API error ({status}): {e}")
+                    except Exception as e:
+                        st.error(f"Something went wrong refreshing subscriptions: {e}")
 
 
 def _render_settings_lock_gate():
