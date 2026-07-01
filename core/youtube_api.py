@@ -265,16 +265,23 @@ def _is_stale(last_fetched_at: str | None) -> bool:
     return datetime.utcnow() - last_fetched > timedelta(hours=CACHE_TTL_HOURS)
 
 
-def refresh_subscription_cache(youtube, force: bool = False) -> int:
+def refresh_subscription_cache(youtube, force: bool = False, progress_callback=None) -> int:
     """
     Pulls subscriptions and their recent videos from the API, but only
     for channels whose cache has gone stale (or all of them, if force=True).
     Writes results into the DB. Returns the number of channels refreshed.
+
+    progress_callback, if given, is called after each subscription is
+    processed as progress_callback(index, total, channel_title) -- lets
+    the UI show real progress instead of a blind spinner, since a
+    first-time sync across many channels makes one API round-trip per
+    channel and can genuinely take several minutes.
     """
     subscriptions = fetch_subscriptions(youtube)
     refreshed_count = 0
+    total = len(subscriptions)
 
-    for sub in subscriptions:
+    for i, sub in enumerate(subscriptions, start=1):
         # Check staleness against the EXISTING stored timestamp, before
         # touching it. Calling upsert_channel() first (as this used to)
         # would overwrite last_fetched_at with "now" before we ever
@@ -283,28 +290,29 @@ def refresh_subscription_cache(youtube, force: bool = False) -> int:
         # including the very first one.
         existing_last_fetched = db.get_channel_last_fetched(sub["channel_id"])
         if not force and not _is_stale(existing_last_fetched):
+            if progress_callback:
+                progress_callback(i, total, sub["title"])
             continue
 
         db.upsert_channel(sub["channel_id"], sub["title"], sub["thumbnail_url"])
 
         videos = fetch_recent_videos(youtube, sub["channel_id"])
-        if not videos:
-            continue
+        if videos:
+            durations = fetch_video_durations(youtube, [v["video_id"] for v in videos])
+            for video in videos:
+                duration_seconds = durations.get(video["video_id"], 0)
+                db.upsert_video(
+                    video_id=video["video_id"],
+                    channel_id=sub["channel_id"],
+                    title=video["title"],
+                    description=video["description"],
+                    thumbnail_url=video["thumbnail_url"],
+                    published_at=video["published_at"],
+                    duration_seconds=duration_seconds,
+                )
+            refreshed_count += 1
 
-        durations = fetch_video_durations(youtube, [v["video_id"] for v in videos])
-
-        for video in videos:
-            duration_seconds = durations.get(video["video_id"], 0)
-            db.upsert_video(
-                video_id=video["video_id"],
-                channel_id=sub["channel_id"],
-                title=video["title"],
-                description=video["description"],
-                thumbnail_url=video["thumbnail_url"],
-                published_at=video["published_at"],
-                duration_seconds=duration_seconds,
-            )
-
-        refreshed_count += 1
+        if progress_callback:
+            progress_callback(i, total, sub["title"])
 
     return refreshed_count
