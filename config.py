@@ -40,6 +40,17 @@ CACHE_TTL_HOURS = 12
 # the older 60-second rule of thumb.
 SHORTS_MAX_SECONDS = 180
 
+# --- Settings lock ---
+# This is a self-discipline speed bump, NOT real security -- anyone with
+# access to this code (i.e. you) could trivially bypass it by editing the
+# database or this file directly. That's intentional: the point is to add
+# enough friction that you don't casually loosen your own rules on a whim,
+# not to build an adversarial lock. Change the password by editing the
+# line below directly -- editing source code is a deliberately higher-
+# friction bypass than clicking a button in the UI.
+SETTINGS_PASSWORD = "changeme"
+SETTINGS_UNLOCK_DELAY_SECONDS = 10
+
 # --- Time budget buckets (minutes) ---
 # Each bucket is (label, min_minutes, max_minutes). max_minutes=None means
 # "and up". Used by the time-picker screen and the filtering logic.

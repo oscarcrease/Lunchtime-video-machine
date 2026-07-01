@@ -7,7 +7,16 @@ Flow:
 Run with: streamlit run app.py
 """
 
+import os
 import streamlit as st
+
+# Must happen before anything touches core.database, since it reads these
+# as plain env vars (keeping that module Streamlit-free and testable).
+# No [turso] secrets configured -> database.py falls back to a local file
+# automatically, so local dev works unchanged.
+if "turso" in st.secrets:
+    os.environ["TURSO_DATABASE_URL"] = st.secrets["turso"]["database_url"]
+    os.environ["TURSO_AUTH_TOKEN"] = st.secrets["turso"]["auth_token"]
 
 from core.database import init_db
 from core import rules_engine as rules
@@ -18,7 +27,12 @@ from ui.pages import (
     render_video_menu,
 )
 
-st.set_page_config(page_title="Lunchtime Video Machine", page_icon="📺", layout="wide")
+st.set_page_config(
+    page_title="Lunchtime Video Machine",
+    page_icon="📺",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
 init_db()
 
